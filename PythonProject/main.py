@@ -1,7 +1,6 @@
 import pygame
-import dicts
-from dicts import player, stick, imp
-
+from game_data import player, imp
+from ai_states import distance_to_player, ai_chasing, ai_attacking
 pygame.init()
 
 clock = pygame.time.Clock()
@@ -18,10 +17,20 @@ gravity = 1200
 ground_y = screen_height - player["height"]
 
 
-def chek_distance(attacker, defender):
-    distance = abs(attacker["x"] - defender["x"])
+def check_distance(character_1, character_2):
+    distance = abs((character_1["x"] + character_1["width"] / 2) - (character_2["x"] + character_2["width"] / 2))
     return distance
 
+def calculate_damage(attacker, defender):
+    if "weapon" in attacker:
+        damage = attacker["weapon"]["damage"]
+        if "bonus_against" in attacker["weapon"]:
+            if attacker["weapon"]["bonus_against"] == defender["character_type"]:
+                damage += attacker["weapon"]["bonus_damage"]
+        return damage
+    else:
+        damage = attacker["damage"]
+        return damage
 def deal_damage(character, damage):
     character["hp"] -= damage
     if character["hp"] <= 0:
@@ -44,7 +53,7 @@ def movement(keys, player, dt):
         player["direction"] = "right"
         if player["state"] != "air":
             player["state"] = "move"
-    if keys[pygame.K_a] and player["x"] > screen_width - screen_width:
+    if keys[pygame.K_a] and player["x"] > 0:
         player["x"] -= player["speed"] * dt
         player["direction"] = "left"
         if player["state"] != "air":
@@ -95,45 +104,28 @@ def draw_character(screen, character):
     )
 
 def draw_hp(screen, character):
-    if character["hp"] < character["max_hp"] / 2:
-        color = (200, 0, 0)
-    elif character["hp"] < character["max_hp"] * 0.75:
-        color = (200, 200, 0)
-    elif character["hp"] >= character["max_hp"] * 0.75:
-        color = (0, 200, 0)
-    hp_percent = character["hp"] / character["max_hp"]
-    hp_height = 5
-    hp_width = character["width"] / 1.5
-    hp_x = (character["x"] + character["width"] / 2) - (hp_width / 2)
-    hp_y = character["y"] - hp_height * 5
-    pygame.draw.rect(
-        screen,
-        (20, 20, 20),
-        (hp_x, hp_y, hp_width, hp_height)
-    )
-    pygame.draw.rect(
-        screen,
-        color,
-        (hp_x, hp_y, hp_width * hp_percent, hp_height)
-    )
-
-def draw_enemy(screen, enemy):
-    draw_width = enemy["width"]
-    draw_x = enemy["x"]
-    draw_y = enemy["y"]
-    draw_height = enemy["height"]
-    color = (255, 0, 0)
-    if enemy["alive"] == False:
-        draw_y = screen_height - enemy["width"]
-        draw_width = enemy["height"]
-        draw_height = enemy["width"]
-        color = (20, 20, 20)
-    pygame.draw.rect(
-        screen,
-        color,
-        (draw_x, draw_y, draw_width, draw_height)
-    )
-
+    if character["alive"]:
+        if character["hp"] < character["max_hp"] / 2:
+            color = (200, 0, 0)
+        elif character["hp"] < character["max_hp"] * 0.75:
+            color = (200, 200, 0)
+        elif character["hp"] >= character["max_hp"] * 0.75:
+            color = (0, 200, 0)
+        hp_percent = character["hp"] / character["max_hp"]
+        hp_height = 5
+        hp_width = character["width"] / 1.5
+        hp_x = (character["x"] + character["width"] / 2) - (hp_width / 2)
+        hp_y = character["y"] - hp_height * 5
+        pygame.draw.rect(
+            screen,
+            (20, 20, 20),
+            (hp_x, hp_y, hp_width, hp_height)
+        )
+        pygame.draw.rect(
+            screen,
+            color,
+            (hp_x, hp_y, hp_width * hp_percent, hp_height)
+        )
 
 while running:
     dt = clock.tick(60) / 1000
@@ -143,14 +135,19 @@ while running:
             running = False
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_f:
-                if chek_distance(player, imp) <= 80 and player["attack_cooldown"] <= 0:
-                    deal_damage(imp, player["weapon"]["damage"])
-                    player["attack_cooldown"] = 0.5
+                if imp["alive"]:
+                    if check_distance(player, imp) <= 80 and player["attack_cooldown"] <= 0:
+                        damage = calculate_damage(player, imp)
+                        deal_damage(imp, damage)
+                        player["attack_cooldown"] = 0.5
 
     keys = pygame.key.get_pressed()
 
     movement(keys, player, dt)
-
+    distance = check_distance(imp, player)
+    distance_to_player(imp, distance)
+    ai_chasing(imp, player, dt)
+    ai_attacking(imp, player, calculate_damage, deal_damage)
     gravitation(player, gravity, dt)
 
     screen.fill((30, 30, 30))
@@ -162,11 +159,13 @@ while running:
     draw_hp(screen, imp)
     if player["attack_cooldown"] > 0:
         player["attack_cooldown"] -= dt
-        print(player["attack_cooldown"], end = "\r")
     if player["attack_cooldown"] < 0:
         player["attack_cooldown"] = 0
+    if imp["attack_cooldown"] > 0:
+        imp["attack_cooldown"] -= dt
+    if imp["attack_cooldown"] < 0:
+        imp["attack_cooldown"] = 0
 
     pygame.display.update()
 
 pygame.quit()
-#получение урона атака блок
